@@ -18,6 +18,7 @@
 #include <QPainter>
 #include <QAbstractTextDocumentLayout>
 #include <QSettings>
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QInputDialog>
 #include "editdialog.h"
@@ -833,14 +834,27 @@ void MainWindow::onGenerateReportClicked()
         return;
     }
 
+    // Convert logo to base64 to embed in HTML
+    QImage logoImage(":/logo.jpg");
+    QByteArray ba;
+    QBuffer buffer(&ba);
+    buffer.open(QIODevice::WriteOnly);
+    logoImage.save(&buffer, "JPG");
+    QString logoBase64 = QString::fromLatin1(ba.toBase64().data());
+
     QString html = "<html dir='rtl'><head><style>"
                    "body { font-family: Arial, sans-serif; }"
-                   "h1 { text-align: right; color: #2c3e50; }"
+                   ".header { display: flex; align-items: center; justify-content: flex-start; text-align: right; }"
+                   ".header img { height: 80px; margin-left: 15px; }"
+                   "h1 { color: #2c3e50; display: inline-block; margin: 0; vertical-align: middle; }"
                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
                    "th, td { border: 1px solid #bdc3c7; padding: 8px; text-align: right; }"
                    "th { background-color: #34495e; color: white; }"
                    "</style></head><body>"
+                   "<div class='header'>"
+                   "<img src='data:image/jpeg;base64," + logoBase64 + "' />"
                    "<h1>تقرير أرشفة ديوان - جمعية حقنا</h1>"
+                   "</div>"
                    "<p>تاريخ التقرير: " + QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm") + "</p>"
                    "<table>"
                    "<tr><th>النوع</th><th>الرقم</th><th>التاريخ</th><th>الموضوع</th><th>الجهة</th></tr>";
