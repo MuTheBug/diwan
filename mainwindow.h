@@ -10,6 +10,9 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QMenu>
+#include <QMenuBar>
+#include <QAction>
 
 class MainWindow : public QMainWindow
 {
@@ -26,13 +29,23 @@ private slots:
     void onTypeChanged(const QString &type);
     void refreshTable();
 
+    // New Features
+    void onDeleteButtonClicked();
+    void onSearchTextChanged(const QString &text);
+    void onExportDatabase();
+    void onImportDatabase();
+    void onAboutApp();
+
 private:
     void setupUi();
+    void setupMenu();
     void clearForm();
     QString savePdfToArchive(const QString& sourcePath);
 
     // UI Elements
     QTableWidget *tableWidget;
+    QLineEdit *searchLineEdit;
+    QPushButton *deleteButton;
 
     QComboBox *typeComboBox;
     QLineEdit *numberLineEdit;

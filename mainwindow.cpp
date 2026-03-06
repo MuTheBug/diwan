@@ -25,6 +25,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     setupUi();
+    setupMenu();
 
     // Ensure database is initialized
     if (!Database::instance().initialize()) {
@@ -111,6 +112,15 @@ void MainWindow::setupUi()
     // --- Left Side: Table & View ---
     QVBoxLayout *tableLayout = new QVBoxLayout();
 
+    QHBoxLayout *searchLayout = new QHBoxLayout();
+    QLabel *searchLabel = new QLabel("البحث:", this);
+    searchLineEdit = new QLineEdit(this);
+    searchLineEdit->setPlaceholderText("ابحث في الموضوع أو الجهة أو الرقم...");
+    connect(searchLineEdit, &QLineEdit::textChanged, this, &MainWindow::onSearchTextChanged);
+    searchLayout->addWidget(searchLabel);
+    searchLayout->addWidget(searchLineEdit);
+    tableLayout->addLayout(searchLayout);
+
     tableWidget = new QTableWidget(this);
     tableWidget->setColumnCount(7);
     tableWidget->setHorizontalHeaderLabels({"المعرف", "النوع", "الرقم", "التاريخ", "الموضوع", "الجهة", "مسار الملف"});
@@ -121,15 +131,45 @@ void MainWindow::setupUi()
     tableWidget->hideColumn(0); // Hide ID
     tableWidget->hideColumn(6); // Hide file path
 
+    QHBoxLayout *actionButtonsLayout = new QHBoxLayout();
+
     viewPdfButton = new QPushButton("عرض ملف PDF المحدد", this);
     viewPdfButton->setMinimumHeight(40);
     viewPdfButton->setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
     connect(viewPdfButton, &QPushButton::clicked, this, &MainWindow::onViewPdfButtonClicked);
 
+    deleteButton = new QPushButton("حذف القيد", this);
+    deleteButton->setMinimumHeight(40);
+    deleteButton->setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
+    connect(deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteButtonClicked);
+
+    actionButtonsLayout->addWidget(viewPdfButton);
+    actionButtonsLayout->addWidget(deleteButton);
+
     tableLayout->addWidget(tableWidget);
-    tableLayout->addWidget(viewPdfButton);
+    tableLayout->addLayout(actionButtonsLayout);
 
     contentLayout->addLayout(tableLayout);
+}
+
+void MainWindow::setupMenu()
+{
+    QMenuBar *menuBar = this->menuBar();
+
+    QMenu *fileMenu = menuBar->addMenu("ملف");
+    QAction *exportAction = fileMenu->addAction("تصدير قاعدة البيانات");
+    connect(exportAction, &QAction::triggered, this, &MainWindow::onExportDatabase);
+
+    QAction *importAction = fileMenu->addAction("استيراد قاعدة البيانات");
+    connect(importAction, &QAction::triggered, this, &MainWindow::onImportDatabase);
+
+    fileMenu->addSeparator();
+    QAction *exitAction = fileMenu->addAction("خروج");
+    connect(exitAction, &QAction::triggered, this, &MainWindow::close);
+
+    QMenu *helpMenu = menuBar->addMenu("مساعدة");
+    QAction *aboutAction = helpMenu->addAction("حول البرنامج");
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::onAboutApp);
 }
 
 void MainWindow::onTypeChanged(const QString &type)
@@ -241,4 +281,99 @@ void MainWindow::onViewPdfButtonClicked()
     } else {
         QMessageBox::warning(this, "خطأ", "لم يتم العثور على الملف المطلوب. ربما تم حذفه.");
     }
+}
+
+void MainWindow::onDeleteButtonClicked()
+{
+    int currentRow = tableWidget->currentRow();
+    if (currentRow < 0) {
+        QMessageBox::information(this, "تنبيه", "يرجى تحديد معاملة من الجدول لحذفها.");
+        return;
+    }
+
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "تأكيد الحذف", "هل أنت متأكد من حذف هذه المعاملة؟\nلن يتم حذف ملف الـ PDF من الأرشيف.",
+                                  QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        int id = tableWidget->item(currentRow, 0)->text().toInt();
+        if (Database::instance().deleteRecord(id)) {
+            refreshTable();
+            QMessageBox::information(this, "نجاح", "تم حذف المعاملة بنجاح.");
+        } else {
+            QMessageBox::critical(this, "خطأ", "فشل في حذف المعاملة.");
+        }
+    }
+}
+
+void MainWindow::onSearchTextChanged(const QString &text)
+{
+    for (int i = 0; i < tableWidget->rowCount(); ++i) {
+        bool match = false;
+        // Search in Number (2), Subject (4), and Correspondent (5)
+        if (tableWidget->item(i, 2)->text().contains(text, Qt::CaseInsensitive) ||
+            tableWidget->item(i, 4)->text().contains(text, Qt::CaseInsensitive) ||
+            tableWidget->item(i, 5)->text().contains(text, Qt::CaseInsensitive)) {
+            match = true;
+        }
+        tableWidget->setRowHidden(i, !match);
+    }
+}
+
+void MainWindow::onExportDatabase()
+{
+    QString defaultName = "diwan_backup_" + QDateTime::currentDateTime().toString("yyyyMMdd") + ".db";
+    QString savePath = QFileDialog::getSaveFileName(this, "تصدير قاعدة البيانات", defaultName, "SQLite Database (*.db)");
+
+    if (!savePath.isEmpty()) {
+        QString currentDbPath = Database::instance().getDatabasePath();
+
+        if (QFile::exists(savePath)) {
+            QFile::remove(savePath);
+        }
+
+        if (QFile::copy(currentDbPath, savePath)) {
+            QMessageBox::information(this, "نجاح", "تم تصدير قاعدة البيانات بنجاح!");
+        } else {
+            QMessageBox::critical(this, "خطأ", "فشل في تصدير قاعدة البيانات.");
+        }
+    }
+}
+
+void MainWindow::onImportDatabase()
+{
+    QString openPath = QFileDialog::getOpenFileName(this, "استيراد قاعدة البيانات", "", "SQLite Database (*.db)");
+
+    if (!openPath.isEmpty()) {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, "تأكيد الاستيراد", "استيراد قاعدة بيانات جديدة سيؤدي إلى استبدال البيانات الحالية.\nهل أنت متأكد؟",
+                                      QMessageBox::Yes | QMessageBox::No);
+
+        if (reply == QMessageBox::Yes) {
+            QString currentDbPath = Database::instance().getDatabasePath();
+            Database::instance().closeDatabase();
+
+            if (QFile::exists(currentDbPath)) {
+                QFile::remove(currentDbPath);
+            }
+
+            if (QFile::copy(openPath, currentDbPath)) {
+                Database::instance().initialize(); // Reopen
+                refreshTable();
+                QMessageBox::information(this, "نجاح", "تم استيراد قاعدة البيانات بنجاح!");
+            } else {
+                QMessageBox::critical(this, "خطأ", "فشل في استيراد قاعدة البيانات. يرجى إعادة تشغيل البرنامج.");
+            }
+        }
+    }
+}
+
+void MainWindow::onAboutApp()
+{
+    QMessageBox::about(this, "حول البرنامج",
+                       "<h2>برنامج أرشفة ديوان جمعية حقنا</h2>"
+                       "<p>هذا البرنامج مخصص لأرشفة وإدارة البريد الصادر والوارد وتسهيل عمل أمينة سر الجمعية.</p>"
+                       "<p><b>تم برمجة وتطوير هذا النظام بواسطة:</b><br/>"
+                       "<span style='font-size: 16px; color: #2980b9;'>مهند وليد حسون</span></p>"
+                       "<p>الإصدار: 1.1</p>");
 }

@@ -110,3 +110,33 @@ QString Database::generateNextNumber(const QString& type)
     }
     return "1";
 }
+
+bool Database::deleteRecord(int id)
+{
+    if (!db.isOpen()) return false;
+
+    QSqlQuery query;
+    query.prepare("DELETE FROM documents WHERE id = :id");
+    query.bindValue(":id", id);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting record:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+QString Database::getDatabasePath() const
+{
+    return db.databaseName();
+}
+
+void Database::closeDatabase()
+{
+    if (db.isOpen()) {
+        QString connectionName = db.connectionName();
+        db.close();
+        db = QSqlDatabase();
+        QSqlDatabase::removeDatabase(connectionName);
+    }
+}

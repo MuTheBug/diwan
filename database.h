@@ -25,6 +25,9 @@ public:
     bool addRecord(const DocumentRecord& record);
     QList<DocumentRecord> getAllRecords();
     QString generateNextNumber(const QString& type);
+    bool deleteRecord(int id);
+    QString getDatabasePath() const;
+    void closeDatabase();
 
 private:
     Database();
