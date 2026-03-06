@@ -35,6 +35,7 @@ private slots:
     void onExportDatabase();
     void onImportDatabase();
     void onAboutApp();
+    void onGenerateReportClicked();
 
 private:
     void setupUi();
@@ -46,6 +47,7 @@ private:
     QTableWidget *tableWidget;
     QLineEdit *searchLineEdit;
     QPushButton *deleteButton;
+    QPushButton *reportButton;
 
     QComboBox *typeComboBox;
     QLineEdit *numberLineEdit;

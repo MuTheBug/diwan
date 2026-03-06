@@ -13,6 +13,8 @@
 #include <QDebug>
 #include <QGroupBox>
 #include <QFormLayout>
+#include <QPrinter>
+#include <QTextDocument>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -51,11 +53,24 @@ void MainWindow::setupUi()
 
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
 
+    // Header Layout for Logo and Title
+    QHBoxLayout *headerLayout = new QHBoxLayout();
+
     // Title label
     QLabel *titleLabel = new QLabel("نظام الأرشفة الإلكتروني - ديوان جمعية حقنا", this);
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 10px;");
-    mainLayout->addWidget(titleLabel);
+
+    // Logo label
+    QLabel *logoLabel = new QLabel(this);
+    QPixmap logoPixmap(":/logo.jpg");
+    logoLabel->setPixmap(logoPixmap.scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    logoLabel->setAlignment(Qt::AlignCenter);
+
+    headerLayout->addWidget(logoLabel);
+    headerLayout->addWidget(titleLabel, 1);
+
+    mainLayout->addLayout(headerLayout);
 
     QHBoxLayout *contentLayout = new QHBoxLayout();
     mainLayout->addLayout(contentLayout);
@@ -143,7 +158,13 @@ void MainWindow::setupUi()
     deleteButton->setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
     connect(deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteButtonClicked);
 
+    reportButton = new QPushButton("توليد تقرير (PDF)", this);
+    reportButton->setMinimumHeight(40);
+    reportButton->setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
+    connect(reportButton, &QPushButton::clicked, this, &MainWindow::onGenerateReportClicked);
+
     actionButtonsLayout->addWidget(viewPdfButton);
+    actionButtonsLayout->addWidget(reportButton);
     actionButtonsLayout->addWidget(deleteButton);
 
     tableLayout->addWidget(tableWidget);
@@ -376,4 +397,50 @@ void MainWindow::onAboutApp()
                        "<p><b>تم برمجة وتطوير هذا النظام بواسطة:</b><br/>"
                        "<span style='font-size: 16px; color: #2980b9;'>مهند وليد حسون</span></p>"
                        "<p>الإصدار: 1.1</p>");
+}
+
+void MainWindow::onGenerateReportClicked()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, "حفظ التقرير", "تقرير_الديوان_" + QDateTime::currentDateTime().toString("yyyyMMdd") + ".pdf", "PDF Files (*.pdf)");
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    QString html = "<html dir='rtl'><head><style>"
+                   "body { font-family: Arial, sans-serif; }"
+                   "h1 { text-align: center; color: #2c3e50; }"
+                   "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
+                   "th, td { border: 1px solid #bdc3c7; padding: 8px; text-align: right; }"
+                   "th { background-color: #34495e; color: white; }"
+                   "</style></head><body>"
+                   "<h1>تقرير أرشفة ديوان - جمعية حقنا</h1>"
+                   "<p>تاريخ التقرير: " + QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm") + "</p>"
+                   "<table>"
+                   "<tr><th>النوع</th><th>الرقم</th><th>التاريخ</th><th>الموضوع</th><th>الجهة</th></tr>";
+
+    for (int i = 0; i < tableWidget->rowCount(); ++i) {
+        if (!tableWidget->isRowHidden(i)) {
+            html += "<tr>";
+            html += "<td>" + tableWidget->item(i, 1)->text() + "</td>";
+            html += "<td>" + tableWidget->item(i, 2)->text() + "</td>";
+            html += "<td>" + tableWidget->item(i, 3)->text() + "</td>";
+            html += "<td>" + tableWidget->item(i, 4)->text() + "</td>";
+            html += "<td>" + tableWidget->item(i, 5)->text() + "</td>";
+            html += "</tr>";
+        }
+    }
+
+    html += "</table></body></html>";
+
+    QTextDocument document;
+    document.setHtml(html);
+
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(fileName);
+    printer.setPageOrientation(QPageLayout::Landscape);
+
+    document.print(&printer);
+
+    QMessageBox::information(this, "نجاح", "تم توليد التقرير بنجاح وحفظه كملف PDF.");
 }

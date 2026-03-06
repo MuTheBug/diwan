@@ -1,4 +1,4 @@
-QT       += core gui sql widgets
+QT       += core gui sql widgets printsupport
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -16,6 +16,9 @@ SOURCES += \
 HEADERS += \
     mainwindow.h \
     database.h
+
+RESOURCES += \
+    resources.qrc
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
