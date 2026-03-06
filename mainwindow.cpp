@@ -72,8 +72,9 @@ void MainWindow::setupUi()
     titleLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     titleLabel->setStyleSheet("font-size: 26px; font-weight: bold; color: #2c3e50; border: none;");
 
-    headerLayout->addWidget(titleLabel, 1);
     headerLayout->addWidget(logoLabel);
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addStretch(1);
 
     mainLayout->addWidget(headerWidget);
 
