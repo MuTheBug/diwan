@@ -15,6 +15,7 @@
 #include <QAction>
 #include <QTabWidget>
 #include <QCheckBox>
+#include <QListWidget>
 
 class MainWindow : public QMainWindow
 {
@@ -26,7 +27,6 @@ public:
 
 private slots:
     void onAddButtonClicked();
-    void onSelectFileButtonClicked();
     void onViewPdfButtonClicked();
     void onTypeChanged(const QString &type);
     void refreshTable();
@@ -44,11 +44,13 @@ private:
     void setupUi();
     void setupDashboardTab(QWidget *tab);
     void setupArchiveTab(QWidget *tab);
+    void setupAdminTab(QWidget *tab);
     void setupSettingsTab(QWidget *tab);
     void setupMenu();
     void clearForm();
     QString savePdfToArchive(const QString& sourcePath);
     void updateDashboardStats();
+    void checkFollowUpNotifications();
 
     // UI Elements
     QTabWidget *tabWidget;
@@ -81,9 +83,16 @@ private:
     QLabel *correspondentLabel;
     QCheckBox *followUpCheckBox;
 
-    QLineEdit *fileLineEdit;
-    QPushButton *selectFileButton;
+    QListWidget *attachmentsList;
+    QPushButton *addFileButton;
+    QPushButton *removeFileButton;
+    QStringList currentAttachmentsPaths;
+
     QPushButton *addButton;
+
+    // Admin Tab
+    QTableWidget *usersTable;
+    QTableWidget *auditTable;
 
     // Settings Tab
     QLineEdit *archivePathLineEdit;

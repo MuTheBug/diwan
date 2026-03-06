@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QPushButton>
+#include <QListWidget>
 #include "database.h"
 
 class EditDialog : public QDialog
@@ -32,6 +33,10 @@ private:
     QLineEdit *subjectLineEdit;
     QLineEdit *correspondentLineEdit;
     QCheckBox *followUpCheckBox;
+
+    QListWidget *attachmentsList;
+    QPushButton *addFileButton;
+    QPushButton *removeFileButton;
 
     QPushButton *saveButton;
     QPushButton *cancelButton;

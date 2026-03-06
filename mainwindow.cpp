@@ -21,6 +21,7 @@
 #include <QCryptographicHash>
 #include <QInputDialog>
 #include "editdialog.h"
+#include <QTimer>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -43,6 +44,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     refreshTable();
     onTypeChanged(typeComboBox->currentText()); // Initialize fields correctly
+
+    // Check for follow-up notifications upon login
+    QTimer::singleShot(500, this, &MainWindow::checkFollowUpNotifications);
 }
 
 MainWindow::~MainWindow()
@@ -97,7 +101,18 @@ void MainWindow::setupUi()
 
     tabWidget->addTab(dashboardTab, "الرئيسية (الإحصائيات)");
     tabWidget->addTab(archiveTab, "الأرشيف و المعاملات");
-    tabWidget->addTab(settingsTab, "إعدادات النظام");
+
+    if (Database::instance().isAdmin()) {
+        QWidget *adminTab = new QWidget();
+        setupAdminTab(adminTab);
+        tabWidget->addTab(adminTab, "إدارة النظام");
+
+        // Settings are admin only now
+        tabWidget->addTab(settingsTab, "إعدادات النظام");
+    } else {
+        // Hide delete/edit if not admin (optional, depending on role rules, we just disable delete here)
+        deleteButton->hide();
+    }
 
     mainLayout->addWidget(tabWidget);
 }
@@ -142,7 +157,7 @@ void MainWindow::setupDashboardTab(QWidget *tab)
 
     pendingTableWidget = new QTableWidget(this);
     pendingTableWidget->setColumnCount(7);
-    pendingTableWidget->setHorizontalHeaderLabels({"المعرف", "النوع", "الرقم", "التاريخ", "الموضوع", "الجهة", "مسار الملف"});
+    pendingTableWidget->setHorizontalHeaderLabels({"المعرف", "النوع", "الرقم", "التاريخ", "الموضوع", "الجهة", "المرفقات"});
     pendingTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     pendingTableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     pendingTableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -151,13 +166,17 @@ void MainWindow::setupDashboardTab(QWidget *tab)
     pendingTableWidget->hideColumn(6);
     layout->addWidget(pendingTableWidget);
 
-    viewPendingPdfButton = new QPushButton("عرض ملف PDF", this);
+    viewPendingPdfButton = new QPushButton("عرض المرفقات", this);
     viewPendingPdfButton->setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; font-size: 14px; border-radius: 5px; padding: 10px;");
     connect(viewPendingPdfButton, &QPushButton::clicked, [this]() {
         int r = pendingTableWidget->currentRow();
         if(r >= 0) {
-            QString path = pendingTableWidget->item(r, 6)->text();
-            if(!path.isEmpty()) QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+            QString pathsStr = pendingTableWidget->item(r, 6)->text();
+            QStringList paths = pathsStr.split(";", Qt::SkipEmptyParts);
+            for (const QString& p : paths) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(p));
+            }
+            if (paths.isEmpty()) QMessageBox::information(this, "معلومة", "لا توجد مرفقات.");
         } else {
             QMessageBox::warning(this, "تنبيه", "حدد معاملة أولاً.");
         }
@@ -193,13 +212,30 @@ void MainWindow::setupArchiveTab(QWidget *tab)
 
     followUpCheckBox = new QCheckBox("يحتاج لمتابعة؟", this);
 
-    QHBoxLayout *fileLayout = new QHBoxLayout();
-    fileLineEdit = new QLineEdit(this);
-    fileLineEdit->setReadOnly(true);
-    selectFileButton = new QPushButton("اختيار PDF...", this);
-    connect(selectFileButton, &QPushButton::clicked, this, &MainWindow::onSelectFileButtonClicked);
-    fileLayout->addWidget(fileLineEdit);
-    fileLayout->addWidget(selectFileButton);
+    attachmentsList = new QListWidget(this);
+    attachmentsList->setMaximumHeight(80);
+
+    QHBoxLayout *attachBtns = new QHBoxLayout();
+    addFileButton = new QPushButton("+ إرفاق", this);
+    removeFileButton = new QPushButton("- إزالة", this);
+    attachBtns->addWidget(addFileButton);
+    attachBtns->addWidget(removeFileButton);
+
+    connect(addFileButton, &QPushButton::clicked, [this]() {
+        QStringList files = QFileDialog::getOpenFileNames(this, "اختر المرفقات", "", "Files (*.*)");
+        for (const QString& file : files) {
+            currentAttachmentsPaths.append(file);
+            attachmentsList->addItem(QFileInfo(file).fileName());
+        }
+    });
+
+    connect(removeFileButton, &QPushButton::clicked, [this]() {
+        int r = attachmentsList->currentRow();
+        if (r >= 0) {
+            currentAttachmentsPaths.removeAt(r);
+            delete attachmentsList->takeItem(r);
+        }
+    });
 
     QFormLayout *innerFormLayout = new QFormLayout();
     innerFormLayout->addRow("النوع:", typeComboBox);
@@ -208,7 +244,8 @@ void MainWindow::setupArchiveTab(QWidget *tab)
     innerFormLayout->addRow("الموضوع:", subjectLineEdit);
     innerFormLayout->addRow(correspondentLabel, correspondentLineEdit);
     innerFormLayout->addRow("متابعة:", followUpCheckBox);
-    innerFormLayout->addRow("ملف PDF:", fileLayout);
+    innerFormLayout->addRow("المرفقات:", attachmentsList);
+    innerFormLayout->addRow("", attachBtns);
 
     formLayout->addLayout(innerFormLayout);
 
@@ -261,7 +298,7 @@ void MainWindow::setupArchiveTab(QWidget *tab)
 
     tableWidget = new QTableWidget(this);
     tableWidget->setColumnCount(7);
-    tableWidget->setHorizontalHeaderLabels({"المعرف", "النوع", "الرقم", "التاريخ", "الموضوع", "الجهة", "مسار الملف"});
+    tableWidget->setHorizontalHeaderLabels({"المعرف", "النوع", "الرقم", "التاريخ", "الموضوع", "الجهة", "المرفقات"});
     tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -271,7 +308,7 @@ void MainWindow::setupArchiveTab(QWidget *tab)
 
     QHBoxLayout *actionButtonsLayout = new QHBoxLayout();
 
-    viewPdfButton = new QPushButton("عرض PDF", this);
+    viewPdfButton = new QPushButton("عرض المرفقات", this);
     viewPdfButton->setStyleSheet("background-color: #2980b9; color: white; padding: 10px; border-radius: 5px;");
     connect(viewPdfButton, &QPushButton::clicked, this, &MainWindow::onViewPdfButtonClicked);
 
@@ -322,22 +359,117 @@ void MainWindow::setupSettingsTab(QWidget *tab)
         }
     });
 
-    changePasswordButton = new QPushButton("تغيير كلمة المرور الخاصة بالنظام", this);
+    changePasswordButton = new QPushButton("تغيير كلمة المرور الخاصة بحسابي", this);
     formLayout->addRow("", changePasswordButton);
 
     connect(changePasswordButton, &QPushButton::clicked, [this]() {
         bool ok;
         QString newPass = QInputDialog::getText(this, "كلمة مرور جديدة", "أدخل كلمة المرور الجديدة:", QLineEdit::Password, "", &ok);
         if (ok && !newPass.isEmpty()) {
-            QByteArray hash = QCryptographicHash::hash(newPass.toUtf8(), QCryptographicHash::Sha256);
-            QSettings settings("Haqna", "DiwanApp");
-            settings.setValue("app_password", hash.toHex());
-            QMessageBox::information(this, "نجاح", "تم تغيير كلمة المرور بنجاح.");
+            if (Database::instance().changePassword(Database::instance().getCurrentUser(), newPass)) {
+                QMessageBox::information(this, "نجاح", "تم تغيير كلمة المرور بنجاح.");
+                Database::instance().logAction("تغيير كلمة المرور", "قام بتغيير كلمة المرور الخاصة به");
+            } else {
+                QMessageBox::critical(this, "خطأ", "فشل في تغيير كلمة المرور.");
+            }
         }
     });
 
     layout->addLayout(formLayout);
     layout->addStretch();
+}
+
+void MainWindow::setupAdminTab(QWidget *tab)
+{
+    QVBoxLayout *layout = new QVBoxLayout(tab);
+
+    QGroupBox *usersGroup = new QGroupBox("إدارة المستخدمين", this);
+    QVBoxLayout *ul = new QVBoxLayout(usersGroup);
+    usersTable = new QTableWidget(this);
+    usersTable->setColumnCount(3);
+    usersTable->setHorizontalHeaderLabels({"المعرف", "اسم المستخدم", "الصلاحية"});
+    usersTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    usersTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    usersTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    ul->addWidget(usersTable);
+
+    QHBoxLayout *uBtns = new QHBoxLayout();
+    QPushButton *addUserBtn = new QPushButton("إضافة مستخدم", this);
+    QPushButton *delUserBtn = new QPushButton("حذف المستخدم", this);
+    uBtns->addWidget(addUserBtn);
+    uBtns->addWidget(delUserBtn);
+    ul->addLayout(uBtns);
+
+    auto refreshUsers = [this]() {
+        usersTable->setRowCount(0);
+        QList<User> users = Database::instance().getAllUsers();
+        for (int i=0; i<users.size(); ++i) {
+            usersTable->insertRow(i);
+            usersTable->setItem(i, 0, new QTableWidgetItem(QString::number(users[i].id)));
+            usersTable->setItem(i, 1, new QTableWidgetItem(users[i].username));
+            usersTable->setItem(i, 2, new QTableWidgetItem(users[i].role));
+        }
+    };
+
+    connect(addUserBtn, &QPushButton::clicked, [this, refreshUsers]() {
+        QDialog d(this);
+        d.setWindowTitle("إضافة مستخدم جديد");
+        QFormLayout fl(&d);
+        QLineEdit uName; fl.addRow("اسم المستخدم:", &uName);
+        QLineEdit uPass; uPass.setEchoMode(QLineEdit::Password); fl.addRow("كلمة المرور:", &uPass);
+        QComboBox uRole; uRole.addItems({"user", "admin"}); fl.addRow("الصلاحية:", &uRole);
+        QPushButton save("حفظ"); fl.addRow("", &save);
+        connect(&save, &QPushButton::clicked, [&]() {
+            if(!uName.text().isEmpty() && !uPass.text().isEmpty()) {
+                Database::instance().addUser(uName.text(), uPass.text(), uRole.currentText());
+                refreshUsers();
+                d.accept();
+            }
+        });
+        d.exec();
+    });
+
+    connect(delUserBtn, &QPushButton::clicked, [this, refreshUsers]() {
+        int r = usersTable->currentRow();
+        if(r >= 0) {
+            QString un = usersTable->item(r, 1)->text();
+            if (Database::instance().deleteUser(un)) {
+                refreshUsers();
+            } else {
+                QMessageBox::warning(this, "خطأ", "لا يمكن حذف هذا المستخدم (ربما هو حسابك الحالي أو المدير الأساسي).");
+            }
+        }
+    });
+
+    refreshUsers();
+    layout->addWidget(usersGroup);
+
+    QGroupBox *auditGroup = new QGroupBox("سجل العمليات (Audit Log)", this);
+    QVBoxLayout *al = new QVBoxLayout(auditGroup);
+    auditTable = new QTableWidget(this);
+    auditTable->setColumnCount(4);
+    auditTable->setHorizontalHeaderLabels({"المستخدم", "العملية", "التفاصيل", "الوقت"});
+    auditTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    al->addWidget(auditTable);
+
+    auto refreshAudit = [this]() {
+        auditTable->setRowCount(0);
+        QList<AuditRecord> logs = Database::instance().getAuditLogs();
+        for (int i=0; i<logs.size(); ++i) {
+            auditTable->insertRow(i);
+            auditTable->setItem(i, 0, new QTableWidgetItem(logs[i].username));
+            auditTable->setItem(i, 1, new QTableWidgetItem(logs[i].action));
+            auditTable->setItem(i, 2, new QTableWidgetItem(logs[i].details));
+            auditTable->setItem(i, 3, new QTableWidgetItem(logs[i].timestamp));
+        }
+    };
+
+    QPushButton *refAuditBtn = new QPushButton("تحديث السجل", this);
+    connect(refAuditBtn, &QPushButton::clicked, refreshAudit);
+    al->addWidget(refAuditBtn);
+
+    refreshAudit();
+    layout->addWidget(auditGroup);
 }
 
 void MainWindow::setupMenu()
@@ -370,14 +502,6 @@ void MainWindow::onTypeChanged(const QString &type)
     numberLineEdit->setText(Database::instance().generateNextNumber(type));
 }
 
-void MainWindow::onSelectFileButtonClicked()
-{
-    QString fileName = QFileDialog::getOpenFileName(this, "اختر ملف PDF", "", "PDF Files (*.pdf)");
-    if (!fileName.isEmpty()) {
-        currentSelectedFilePath = fileName;
-        fileLineEdit->setText(QFileInfo(fileName).fileName());
-    }
-}
 
 QString MainWindow::savePdfToArchive(const QString& sourcePath)
 {
@@ -400,15 +524,12 @@ void MainWindow::onAddButtonClicked()
         return;
     }
 
-    if (currentSelectedFilePath.isEmpty()) {
-        QMessageBox::warning(this, "تنبيه", "يرجى اختيار ملف PDF للأرشفة.");
-        return;
-    }
-
-    QString savedFilePath = savePdfToArchive(currentSelectedFilePath);
-    if (savedFilePath.isEmpty()) {
-        QMessageBox::critical(this, "خطأ", "فشل في نسخ ملف PDF إلى مجلد الأرشيف.");
-        return;
+    QStringList savedPaths;
+    for (const QString& path : currentAttachmentsPaths) {
+        QString saved = savePdfToArchive(path);
+        if (!saved.isEmpty()) {
+            savedPaths.append(saved);
+        }
     }
 
     DocumentRecord record;
@@ -417,7 +538,7 @@ void MainWindow::onAddButtonClicked()
     record.date = dateEdit->date().toString("yyyy-MM-dd");
     record.subject = subjectLineEdit->text();
     record.correspondent = correspondentLineEdit->text();
-    record.filePath = savedFilePath;
+    record.attachments = savedPaths;
     record.needsFollowUp = followUpCheckBox->isChecked();
 
     if (Database::instance().addRecord(record)) {
@@ -433,8 +554,8 @@ void MainWindow::clearForm()
 {
     subjectLineEdit->clear();
     correspondentLineEdit->clear();
-    currentSelectedFilePath.clear();
-    fileLineEdit->clear();
+    currentAttachmentsPaths.clear();
+    attachmentsList->clear();
     dateEdit->setDate(QDate::currentDate());
     followUpCheckBox->setChecked(false);
     onTypeChanged(typeComboBox->currentText()); // Update the auto-number
@@ -463,7 +584,7 @@ void MainWindow::updateDashboardStats()
             pendingTableWidget->setItem(pendingRow, 3, new QTableWidgetItem(r.date));
             pendingTableWidget->setItem(pendingRow, 4, new QTableWidgetItem(r.subject));
             pendingTableWidget->setItem(pendingRow, 5, new QTableWidgetItem(r.correspondent));
-            pendingTableWidget->setItem(pendingRow, 6, new QTableWidgetItem(r.filePath));
+            pendingTableWidget->setItem(pendingRow, 6, new QTableWidgetItem(r.attachments.join(";")));
             pendingRow++;
         }
     }
@@ -486,7 +607,7 @@ void MainWindow::refreshTable()
         tableWidget->setItem(i, 3, new QTableWidgetItem(records[i].date));
         tableWidget->setItem(i, 4, new QTableWidgetItem(records[i].subject));
         tableWidget->setItem(i, 5, new QTableWidgetItem(records[i].correspondent));
-        tableWidget->setItem(i, 6, new QTableWidgetItem(records[i].filePath));
+        tableWidget->setItem(i, 6, new QTableWidgetItem(records[i].attachments.join(";")));
 
         if (records[i].needsFollowUp) {
             for (int col = 1; col <= 5; ++col) {
@@ -499,6 +620,27 @@ void MainWindow::refreshTable()
     updateDashboardStats();
 }
 
+void MainWindow::checkFollowUpNotifications()
+{
+    QList<DocumentRecord> records = Database::instance().getAllRecords();
+    int pendingCount = 0;
+    QDate today = QDate::currentDate();
+
+    for (const auto& r : records) {
+        if (r.needsFollowUp) {
+            QDate docDate = QDate::fromString(r.date, "yyyy-MM-dd");
+            if (docDate.daysTo(today) > 3) {
+                pendingCount++;
+            }
+        }
+    }
+
+    if (pendingCount > 0) {
+        QMessageBox::information(this, "تنبيه المعاملات المعلقة",
+                                 QString("يوجد لديك %1 معاملة تحتاج لمتابعة وتأخرت لأكثر من 3 أيام!\nيرجى مراجعة لوحة الإحصائيات (الرئيسية).").arg(pendingCount));
+    }
+}
+
 void MainWindow::onViewPdfButtonClicked()
 {
     int currentRow = tableWidget->currentRow();
@@ -507,11 +649,24 @@ void MainWindow::onViewPdfButtonClicked()
         return;
     }
 
-    QString filePath = tableWidget->item(currentRow, 6)->text();
-    if (!filePath.isEmpty() && QFile::exists(filePath)) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
-    } else {
-        QMessageBox::warning(this, "خطأ", "لم يتم العثور على الملف المطلوب. ربما تم حذفه.");
+    QString pathsStr = tableWidget->item(currentRow, 6)->text();
+    QStringList paths = pathsStr.split(";", Qt::SkipEmptyParts);
+
+    if (paths.isEmpty()) {
+        QMessageBox::information(this, "معلومة", "لا توجد مرفقات لهذه المعاملة.");
+        return;
+    }
+
+    bool anyOpened = false;
+    for (const QString& path : paths) {
+        if (QFile::exists(path)) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+            anyOpened = true;
+        }
+    }
+
+    if (!anyOpened) {
+        QMessageBox::warning(this, "خطأ", "لم يتم العثور على أي من الملفات المطلوبة. ربما تم حذفها.");
     }
 }
 
@@ -559,6 +714,23 @@ void MainWindow::onEditButtonClicked()
     EditDialog editDialog(recordToEdit, this);
     if (editDialog.exec() == QDialog::Accepted) {
         DocumentRecord updated = editDialog.getUpdatedRecord();
+
+        // Ensure any newly added files are copied to the archive
+        QStringList finalPaths;
+        for (const QString& path : updated.attachments) {
+            // If the path is already in the archive directory, it's an old file.
+            // If it's not, it's a new file that needs to be copied.
+            if (path.startsWith(archiveDir)) {
+                finalPaths.append(path);
+            } else {
+                QString saved = savePdfToArchive(path);
+                if (!saved.isEmpty()) {
+                    finalPaths.append(saved);
+                }
+            }
+        }
+        updated.attachments = finalPaths;
+
         if (Database::instance().updateRecord(updated)) {
             refreshTable();
             QMessageBox::information(this, "نجاح", "تم حفظ التعديلات بنجاح.");

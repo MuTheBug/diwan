@@ -18,9 +18,9 @@ private slots:
 
 private:
     void setupUi();
-    bool checkPassword(const QString& password);
-    void createInitialPassword(const QString& password);
+    void instructionLabelUpdate();
 
+    QLineEdit *usernameLineEdit;
     QLineEdit *passwordLineEdit;
     QPushButton *loginButton;
     bool isFirstLaunch;
