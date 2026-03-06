@@ -15,6 +15,8 @@
 #include <QFormLayout>
 #include <QPrinter>
 #include <QTextDocument>
+#include <QPainter>
+#include <QAbstractTextDocumentLayout>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -54,23 +56,26 @@ void MainWindow::setupUi()
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
 
     // Header Layout for Logo and Title
-    QHBoxLayout *headerLayout = new QHBoxLayout();
-
-    // Title label
-    QLabel *titleLabel = new QLabel("نظام الأرشفة الإلكتروني - ديوان جمعية حقنا", this);
-    titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 10px;");
+    QWidget *headerWidget = new QWidget(this);
+    headerWidget->setStyleSheet("background-color: white; border-bottom: 2px solid #bdc3c7; border-radius: 5px;");
+    QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
+    headerLayout->setContentsMargins(10, 10, 10, 10);
 
     // Logo label
     QLabel *logoLabel = new QLabel(this);
     QPixmap logoPixmap(":/logo.jpg");
-    logoLabel->setPixmap(logoPixmap.scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    logoLabel->setPixmap(logoPixmap.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     logoLabel->setAlignment(Qt::AlignCenter);
 
-    headerLayout->addWidget(logoLabel);
-    headerLayout->addWidget(titleLabel, 1);
+    // Title label
+    QLabel *titleLabel = new QLabel("نظام الأرشفة الإلكتروني - ديوان جمعية حقنا", this);
+    titleLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    titleLabel->setStyleSheet("font-size: 26px; font-weight: bold; color: #2c3e50; border: none;");
 
-    mainLayout->addLayout(headerLayout);
+    headerLayout->addWidget(titleLabel, 1);
+    headerLayout->addWidget(logoLabel);
+
+    mainLayout->addWidget(headerWidget);
 
     QHBoxLayout *contentLayout = new QHBoxLayout();
     mainLayout->addLayout(contentLayout);
@@ -440,7 +445,55 @@ void MainWindow::onGenerateReportClicked()
     printer.setOutputFileName(fileName);
     printer.setPageOrientation(QPageLayout::Landscape);
 
-    document.print(&printer);
+    // Set page margins (in millimeters)
+    printer.setPageMargins(QMarginsF(10, 10, 10, 10), QPageLayout::Millimeter);
+
+    // Adjust document size to the printer's page rect
+    document.setPageSize(printer.pageLayout().paintRectPixels(printer.resolution()).size());
+
+    QPainter painter(&printer);
+    QImage logo(":/logo.jpg");
+
+    // Prepare watermark opacity
+    painter.setOpacity(0.15); // Semi-transparent for watermark
+
+    // Get logical page size and layout constraints
+    QRectF pageRect(0, 0, document.pageSize().width(), document.pageSize().height());
+
+    // Determine the number of pages
+    int pageCount = document.pageCount();
+
+    // Iterate and paint each page
+    for (int i = 0; i < pageCount; ++i) {
+        if (i > 0) {
+            printer.newPage();
+        }
+
+        painter.save();
+
+        // Draw the watermark logo centered
+        if (!logo.isNull()) {
+            QImage scaledLogo = logo.scaled(pageRect.width() * 0.5, pageRect.height() * 0.5, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            QPointF center((pageRect.width() - scaledLogo.width()) / 2.0,
+                           (pageRect.height() - scaledLogo.height()) / 2.0);
+            painter.setOpacity(0.1); // Keep it very light
+            painter.drawImage(center, scaledLogo);
+        }
+
+        // Draw the HTML text over the watermark
+        painter.setOpacity(1.0); // Reset opacity for text
+        QRectF textRect(0, i * pageRect.height(), pageRect.width(), pageRect.height());
+        painter.translate(0, -textRect.top());
+        QRectF clipRect(0, textRect.top(), pageRect.width(), pageRect.height());
+
+        QAbstractTextDocumentLayout::PaintContext ctx;
+        ctx.clip = clipRect;
+        document.documentLayout()->draw(&painter, ctx);
+
+        painter.restore();
+    }
+
+    painter.end();
 
     QMessageBox::information(this, "نجاح", "تم توليد التقرير بنجاح وحفظه كملف PDF.");
 }
