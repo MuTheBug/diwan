@@ -15,6 +15,7 @@ struct DocumentRecord {
     QString subject;
     QString correspondent;
     QString filePath;
+    bool needsFollowUp; // 1 for true, 0 for false
 };
 
 class Database
@@ -25,6 +26,7 @@ public:
     bool addRecord(const DocumentRecord& record);
     QList<DocumentRecord> getAllRecords();
     QString generateNextNumber(const QString& type);
+    bool updateRecord(const DocumentRecord& record);
     bool deleteRecord(int id);
     QString getDatabasePath() const;
     void closeDatabase();

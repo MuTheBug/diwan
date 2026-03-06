@@ -13,6 +13,8 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QAction>
+#include <QTabWidget>
+#include <QCheckBox>
 
 class MainWindow : public QMainWindow
 {
@@ -31,7 +33,8 @@ private slots:
 
     // New Features
     void onDeleteButtonClicked();
-    void onSearchTextChanged(const QString &text);
+    void onEditButtonClicked();
+    void onSearchFilterChanged();
     void onExportDatabase();
     void onImportDatabase();
     void onAboutApp();
@@ -39,15 +42,36 @@ private slots:
 
 private:
     void setupUi();
+    void setupDashboardTab(QWidget *tab);
+    void setupArchiveTab(QWidget *tab);
+    void setupSettingsTab(QWidget *tab);
     void setupMenu();
     void clearForm();
     QString savePdfToArchive(const QString& sourcePath);
+    void updateDashboardStats();
 
     // UI Elements
+    QTabWidget *tabWidget;
+
+    // Dashboard Tab
+    QLabel *statTotalLabel;
+    QLabel *statIncomingLabel;
+    QLabel *statOutgoingLabel;
+    QTableWidget *pendingTableWidget;
+    QPushButton *viewPendingPdfButton;
+
+    // Archive Tab
     QTableWidget *tableWidget;
     QLineEdit *searchLineEdit;
+    QComboBox *filterTypeComboBox;
+    QDateEdit *filterStartDate;
+    QDateEdit *filterEndDate;
+    QCheckBox *filterDateEnabled;
+
     QPushButton *deleteButton;
+    QPushButton *editButton;
     QPushButton *reportButton;
+    QPushButton *viewPdfButton;
 
     QComboBox *typeComboBox;
     QLineEdit *numberLineEdit;
@@ -55,12 +79,16 @@ private:
     QLineEdit *subjectLineEdit;
     QLineEdit *correspondentLineEdit;
     QLabel *correspondentLabel;
+    QCheckBox *followUpCheckBox;
 
     QLineEdit *fileLineEdit;
     QPushButton *selectFileButton;
-
     QPushButton *addButton;
-    QPushButton *viewPdfButton;
+
+    // Settings Tab
+    QLineEdit *archivePathLineEdit;
+    QPushButton *changePathButton;
+    QPushButton *changePasswordButton;
 
     QString currentSelectedFilePath;
     QString archiveDir;

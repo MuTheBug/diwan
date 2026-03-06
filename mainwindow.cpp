@@ -17,12 +17,17 @@
 #include <QTextDocument>
 #include <QPainter>
 #include <QAbstractTextDocumentLayout>
+#include <QSettings>
+#include <QCryptographicHash>
+#include <QInputDialog>
+#include "editdialog.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     // Setup archive directory
-    archiveDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Haqna_Archive";
+    QSettings settings("Haqna", "DiwanApp");
+    archiveDir = settings.value("archive_path", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Haqna_Archive").toString();
     QDir dir(archiveDir);
     if (!dir.exists()) {
         dir.mkpath(".");
@@ -78,8 +83,91 @@ void MainWindow::setupUi()
 
     mainLayout->addWidget(headerWidget);
 
-    QHBoxLayout *contentLayout = new QHBoxLayout();
-    mainLayout->addLayout(contentLayout);
+    tabWidget = new QTabWidget(this);
+    tabWidget->setStyleSheet("QTabBar::tab { padding: 10px 20px; font-weight: bold; font-size: 14px; }");
+
+    QWidget *dashboardTab = new QWidget();
+    setupDashboardTab(dashboardTab);
+
+    QWidget *archiveTab = new QWidget();
+    setupArchiveTab(archiveTab);
+
+    QWidget *settingsTab = new QWidget();
+    setupSettingsTab(settingsTab);
+
+    tabWidget->addTab(dashboardTab, "الرئيسية (الإحصائيات)");
+    tabWidget->addTab(archiveTab, "الأرشيف و المعاملات");
+    tabWidget->addTab(settingsTab, "إعدادات النظام");
+
+    mainLayout->addWidget(tabWidget);
+}
+
+void MainWindow::setupDashboardTab(QWidget *tab)
+{
+    QVBoxLayout *layout = new QVBoxLayout(tab);
+
+    // Stats layout
+    QHBoxLayout *statsLayout = new QHBoxLayout();
+
+    QGroupBox *totalGroup = new QGroupBox("إجمالي المعاملات");
+    QVBoxLayout *l1 = new QVBoxLayout(totalGroup);
+    statTotalLabel = new QLabel("0");
+    statTotalLabel->setAlignment(Qt::AlignCenter);
+    statTotalLabel->setStyleSheet("font-size: 36px; font-weight: bold; color: #34495e;");
+    l1->addWidget(statTotalLabel);
+
+    QGroupBox *incomingGroup = new QGroupBox("البريد الوارد");
+    QVBoxLayout *l2 = new QVBoxLayout(incomingGroup);
+    statIncomingLabel = new QLabel("0");
+    statIncomingLabel->setAlignment(Qt::AlignCenter);
+    statIncomingLabel->setStyleSheet("font-size: 36px; font-weight: bold; color: #27ae60;");
+    l2->addWidget(statIncomingLabel);
+
+    QGroupBox *outgoingGroup = new QGroupBox("البريد الصادر");
+    QVBoxLayout *l3 = new QVBoxLayout(outgoingGroup);
+    statOutgoingLabel = new QLabel("0");
+    statOutgoingLabel->setAlignment(Qt::AlignCenter);
+    statOutgoingLabel->setStyleSheet("font-size: 36px; font-weight: bold; color: #2980b9;");
+    l3->addWidget(statOutgoingLabel);
+
+    statsLayout->addWidget(totalGroup);
+    statsLayout->addWidget(incomingGroup);
+    statsLayout->addWidget(outgoingGroup);
+    layout->addLayout(statsLayout);
+
+    // Pending Follow-ups table
+    QLabel *pendingLabel = new QLabel("المعاملات التي تحتاج لمتابعة:");
+    pendingLabel->setStyleSheet("font-weight: bold; font-size: 16px; margin-top: 15px;");
+    layout->addWidget(pendingLabel);
+
+    pendingTableWidget = new QTableWidget(this);
+    pendingTableWidget->setColumnCount(7);
+    pendingTableWidget->setHorizontalHeaderLabels({"المعرف", "النوع", "الرقم", "التاريخ", "الموضوع", "الجهة", "مسار الملف"});
+    pendingTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    pendingTableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+    pendingTableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    pendingTableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    pendingTableWidget->hideColumn(0);
+    pendingTableWidget->hideColumn(6);
+    layout->addWidget(pendingTableWidget);
+
+    viewPendingPdfButton = new QPushButton("عرض ملف PDF", this);
+    viewPendingPdfButton->setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; font-size: 14px; border-radius: 5px; padding: 10px;");
+    connect(viewPendingPdfButton, &QPushButton::clicked, [this]() {
+        int r = pendingTableWidget->currentRow();
+        if(r >= 0) {
+            QString path = pendingTableWidget->item(r, 6)->text();
+            if(!path.isEmpty()) QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        } else {
+            QMessageBox::warning(this, "تنبيه", "حدد معاملة أولاً.");
+        }
+    });
+    layout->addWidget(viewPendingPdfButton);
+}
+
+void MainWindow::setupArchiveTab(QWidget *tab)
+{
+    QHBoxLayout *contentLayout = new QHBoxLayout(tab);
 
     // --- Right Side: Form ---
     QGroupBox *formGroupBox = new QGroupBox("إضافة معاملة جديدة", this);
@@ -103,6 +191,8 @@ void MainWindow::setupUi()
     correspondentLabel = new QLabel("الجهة المرسلة:", this);
     correspondentLineEdit = new QLineEdit(this);
 
+    followUpCheckBox = new QCheckBox("يحتاج لمتابعة؟", this);
+
     QHBoxLayout *fileLayout = new QHBoxLayout();
     fileLineEdit = new QLineEdit(this);
     fileLineEdit->setReadOnly(true);
@@ -117,6 +207,7 @@ void MainWindow::setupUi()
     innerFormLayout->addRow("التاريخ:", dateEdit);
     innerFormLayout->addRow("الموضوع:", subjectLineEdit);
     innerFormLayout->addRow(correspondentLabel, correspondentLineEdit);
+    innerFormLayout->addRow("متابعة:", followUpCheckBox);
     innerFormLayout->addRow("ملف PDF:", fileLayout);
 
     formLayout->addLayout(innerFormLayout);
@@ -133,14 +224,40 @@ void MainWindow::setupUi()
     // --- Left Side: Table & View ---
     QVBoxLayout *tableLayout = new QVBoxLayout();
 
-    QHBoxLayout *searchLayout = new QHBoxLayout();
-    QLabel *searchLabel = new QLabel("البحث:", this);
+    QGroupBox *filterGroup = new QGroupBox("تصفية متقدمة", this);
+    QHBoxLayout *filterLayout = new QHBoxLayout(filterGroup);
+
     searchLineEdit = new QLineEdit(this);
-    searchLineEdit->setPlaceholderText("ابحث في الموضوع أو الجهة أو الرقم...");
-    connect(searchLineEdit, &QLineEdit::textChanged, this, &MainWindow::onSearchTextChanged);
-    searchLayout->addWidget(searchLabel);
-    searchLayout->addWidget(searchLineEdit);
-    tableLayout->addLayout(searchLayout);
+    searchLineEdit->setPlaceholderText("ابحث في الموضوع/الجهة/الرقم...");
+    connect(searchLineEdit, &QLineEdit::textChanged, this, &MainWindow::onSearchFilterChanged);
+
+    filterTypeComboBox = new QComboBox(this);
+    filterTypeComboBox->addItems({"الكل", "وارد", "صادر"});
+    connect(filterTypeComboBox, &QComboBox::currentTextChanged, this, &MainWindow::onSearchFilterChanged);
+
+    filterDateEnabled = new QCheckBox("تاريخ من:", this);
+    connect(filterDateEnabled, &QCheckBox::toggled, this, &MainWindow::onSearchFilterChanged);
+    filterStartDate = new QDateEdit(QDate::currentDate().addDays(-30), this);
+    filterStartDate->setDisplayFormat("yyyy-MM-dd");
+    filterStartDate->setCalendarPopup(true);
+    connect(filterStartDate, &QDateEdit::dateChanged, this, &MainWindow::onSearchFilterChanged);
+
+    QLabel *toLabel = new QLabel("إلى:");
+    filterEndDate = new QDateEdit(QDate::currentDate(), this);
+    filterEndDate->setDisplayFormat("yyyy-MM-dd");
+    filterEndDate->setCalendarPopup(true);
+    connect(filterEndDate, &QDateEdit::dateChanged, this, &MainWindow::onSearchFilterChanged);
+
+    filterLayout->addWidget(new QLabel("البحث:"));
+    filterLayout->addWidget(searchLineEdit);
+    filterLayout->addWidget(new QLabel("النوع:"));
+    filterLayout->addWidget(filterTypeComboBox);
+    filterLayout->addWidget(filterDateEnabled);
+    filterLayout->addWidget(filterStartDate);
+    filterLayout->addWidget(toLabel);
+    filterLayout->addWidget(filterEndDate);
+
+    tableLayout->addWidget(filterGroup);
 
     tableWidget = new QTableWidget(this);
     tableWidget->setColumnCount(7);
@@ -154,22 +271,24 @@ void MainWindow::setupUi()
 
     QHBoxLayout *actionButtonsLayout = new QHBoxLayout();
 
-    viewPdfButton = new QPushButton("عرض ملف PDF المحدد", this);
-    viewPdfButton->setMinimumHeight(40);
-    viewPdfButton->setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
+    viewPdfButton = new QPushButton("عرض PDF", this);
+    viewPdfButton->setStyleSheet("background-color: #2980b9; color: white; padding: 10px; border-radius: 5px;");
     connect(viewPdfButton, &QPushButton::clicked, this, &MainWindow::onViewPdfButtonClicked);
 
+    editButton = new QPushButton("تعديل القيد", this);
+    editButton->setStyleSheet("background-color: #f39c12; color: white; padding: 10px; border-radius: 5px;");
+    connect(editButton, &QPushButton::clicked, this, &MainWindow::onEditButtonClicked);
+
     deleteButton = new QPushButton("حذف القيد", this);
-    deleteButton->setMinimumHeight(40);
-    deleteButton->setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
+    deleteButton->setStyleSheet("background-color: #c0392b; color: white; padding: 10px; border-radius: 5px;");
     connect(deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteButtonClicked);
 
     reportButton = new QPushButton("توليد تقرير (PDF)", this);
-    reportButton->setMinimumHeight(40);
-    reportButton->setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold; font-size: 14px; border-radius: 5px;");
+    reportButton->setStyleSheet("background-color: #8e44ad; color: white; padding: 10px; border-radius: 5px;");
     connect(reportButton, &QPushButton::clicked, this, &MainWindow::onGenerateReportClicked);
 
     actionButtonsLayout->addWidget(viewPdfButton);
+    actionButtonsLayout->addWidget(editButton);
     actionButtonsLayout->addWidget(reportButton);
     actionButtonsLayout->addWidget(deleteButton);
 
@@ -177,6 +296,48 @@ void MainWindow::setupUi()
     tableLayout->addLayout(actionButtonsLayout);
 
     contentLayout->addLayout(tableLayout);
+}
+
+void MainWindow::setupSettingsTab(QWidget *tab)
+{
+    QVBoxLayout *layout = new QVBoxLayout(tab);
+    QFormLayout *formLayout = new QFormLayout();
+
+    QHBoxLayout *pathLayout = new QHBoxLayout();
+    archivePathLineEdit = new QLineEdit(archiveDir, this);
+    archivePathLineEdit->setReadOnly(true);
+    changePathButton = new QPushButton("تغيير المسار", this);
+    pathLayout->addWidget(archivePathLineEdit);
+    pathLayout->addWidget(changePathButton);
+    formLayout->addRow("مسار مجلد الأرشيف (PDFs):", pathLayout);
+
+    connect(changePathButton, &QPushButton::clicked, [this]() {
+        QString dir = QFileDialog::getExistingDirectory(this, "اختر مجلد الأرشيف الجديد", archiveDir);
+        if(!dir.isEmpty()) {
+            archiveDir = dir;
+            archivePathLineEdit->setText(dir);
+            QSettings settings("Haqna", "DiwanApp");
+            settings.setValue("archive_path", dir);
+            QMessageBox::information(this, "نجاح", "تم تحديث مسار الحفظ بنجاح.");
+        }
+    });
+
+    changePasswordButton = new QPushButton("تغيير كلمة المرور الخاصة بالنظام", this);
+    formLayout->addRow("", changePasswordButton);
+
+    connect(changePasswordButton, &QPushButton::clicked, [this]() {
+        bool ok;
+        QString newPass = QInputDialog::getText(this, "كلمة مرور جديدة", "أدخل كلمة المرور الجديدة:", QLineEdit::Password, "", &ok);
+        if (ok && !newPass.isEmpty()) {
+            QByteArray hash = QCryptographicHash::hash(newPass.toUtf8(), QCryptographicHash::Sha256);
+            QSettings settings("Haqna", "DiwanApp");
+            settings.setValue("app_password", hash.toHex());
+            QMessageBox::information(this, "نجاح", "تم تغيير كلمة المرور بنجاح.");
+        }
+    });
+
+    layout->addLayout(formLayout);
+    layout->addStretch();
 }
 
 void MainWindow::setupMenu()
@@ -257,6 +418,7 @@ void MainWindow::onAddButtonClicked()
     record.subject = subjectLineEdit->text();
     record.correspondent = correspondentLineEdit->text();
     record.filePath = savedFilePath;
+    record.needsFollowUp = followUpCheckBox->isChecked();
 
     if (Database::instance().addRecord(record)) {
         QMessageBox::information(this, "نجاح", "تم حفظ المعاملة والأرشفة بنجاح.");
@@ -274,7 +436,41 @@ void MainWindow::clearForm()
     currentSelectedFilePath.clear();
     fileLineEdit->clear();
     dateEdit->setDate(QDate::currentDate());
+    followUpCheckBox->setChecked(false);
     onTypeChanged(typeComboBox->currentText()); // Update the auto-number
+}
+
+void MainWindow::updateDashboardStats()
+{
+    QList<DocumentRecord> records = Database::instance().getAllRecords();
+
+    int total = records.size();
+    int incoming = 0;
+    int outgoing = 0;
+
+    pendingTableWidget->setRowCount(0);
+    int pendingRow = 0;
+
+    for (const auto& r : records) {
+        if (r.type == "وارد") incoming++;
+        else if (r.type == "صادر") outgoing++;
+
+        if (r.needsFollowUp) {
+            pendingTableWidget->insertRow(pendingRow);
+            pendingTableWidget->setItem(pendingRow, 0, new QTableWidgetItem(QString::number(r.id)));
+            pendingTableWidget->setItem(pendingRow, 1, new QTableWidgetItem(r.type));
+            pendingTableWidget->setItem(pendingRow, 2, new QTableWidgetItem(r.docNumber));
+            pendingTableWidget->setItem(pendingRow, 3, new QTableWidgetItem(r.date));
+            pendingTableWidget->setItem(pendingRow, 4, new QTableWidgetItem(r.subject));
+            pendingTableWidget->setItem(pendingRow, 5, new QTableWidgetItem(r.correspondent));
+            pendingTableWidget->setItem(pendingRow, 6, new QTableWidgetItem(r.filePath));
+            pendingRow++;
+        }
+    }
+
+    statTotalLabel->setText(QString::number(total));
+    statIncomingLabel->setText(QString::number(incoming));
+    statOutgoingLabel->setText(QString::number(outgoing));
 }
 
 void MainWindow::refreshTable()
@@ -291,7 +487,16 @@ void MainWindow::refreshTable()
         tableWidget->setItem(i, 4, new QTableWidgetItem(records[i].subject));
         tableWidget->setItem(i, 5, new QTableWidgetItem(records[i].correspondent));
         tableWidget->setItem(i, 6, new QTableWidgetItem(records[i].filePath));
+
+        if (records[i].needsFollowUp) {
+            for (int col = 1; col <= 5; ++col) {
+                tableWidget->item(i, col)->setBackground(QBrush(QColor("#fcf3cf"))); // Light yellow for follow-ups
+            }
+        }
     }
+
+    onSearchFilterChanged(); // Re-apply filters
+    updateDashboardStats();
 }
 
 void MainWindow::onViewPdfButtonClicked()
@@ -333,17 +538,61 @@ void MainWindow::onDeleteButtonClicked()
     }
 }
 
-void MainWindow::onSearchTextChanged(const QString &text)
+void MainWindow::onEditButtonClicked()
 {
-    for (int i = 0; i < tableWidget->rowCount(); ++i) {
-        bool match = false;
-        // Search in Number (2), Subject (4), and Correspondent (5)
-        if (tableWidget->item(i, 2)->text().contains(text, Qt::CaseInsensitive) ||
-            tableWidget->item(i, 4)->text().contains(text, Qt::CaseInsensitive) ||
-            tableWidget->item(i, 5)->text().contains(text, Qt::CaseInsensitive)) {
-            match = true;
+    int currentRow = tableWidget->currentRow();
+    if (currentRow < 0) {
+        QMessageBox::information(this, "تنبيه", "يرجى تحديد معاملة من الجدول لتعديلها.");
+        return;
+    }
+
+    int id = tableWidget->item(currentRow, 0)->text().toInt();
+    QList<DocumentRecord> records = Database::instance().getAllRecords();
+    DocumentRecord recordToEdit;
+    for (const auto& r : records) {
+        if (r.id == id) {
+            recordToEdit = r;
+            break;
         }
-        tableWidget->setRowHidden(i, !match);
+    }
+
+    EditDialog editDialog(recordToEdit, this);
+    if (editDialog.exec() == QDialog::Accepted) {
+        DocumentRecord updated = editDialog.getUpdatedRecord();
+        if (Database::instance().updateRecord(updated)) {
+            refreshTable();
+            QMessageBox::information(this, "نجاح", "تم حفظ التعديلات بنجاح.");
+        } else {
+            QMessageBox::critical(this, "خطأ", "حدث خطأ أثناء حفظ التعديلات.");
+        }
+    }
+}
+
+void MainWindow::onSearchFilterChanged()
+{
+    QString searchText = searchLineEdit->text();
+    QString typeFilter = filterTypeComboBox->currentText();
+    bool enableDate = filterDateEnabled->isChecked();
+    QDate startDate = filterStartDate->date();
+    QDate endDate = filterEndDate->date();
+
+    for (int i = 0; i < tableWidget->rowCount(); ++i) {
+        bool matchSearch = false;
+        if (tableWidget->item(i, 2)->text().contains(searchText, Qt::CaseInsensitive) ||
+            tableWidget->item(i, 4)->text().contains(searchText, Qt::CaseInsensitive) ||
+            tableWidget->item(i, 5)->text().contains(searchText, Qt::CaseInsensitive)) {
+            matchSearch = true;
+        }
+
+        bool matchType = (typeFilter == "الكل") || (tableWidget->item(i, 1)->text() == typeFilter);
+
+        bool matchDate = true;
+        if (enableDate) {
+            QDate rowDate = QDate::fromString(tableWidget->item(i, 3)->text(), "yyyy-MM-dd");
+            matchDate = (rowDate >= startDate && rowDate <= endDate);
+        }
+
+        tableWidget->setRowHidden(i, !(matchSearch && matchType && matchDate));
     }
 }
 

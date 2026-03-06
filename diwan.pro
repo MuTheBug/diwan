@@ -11,11 +11,15 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    database.cpp
+    database.cpp \
+    logindialog.cpp \
+    editdialog.cpp
 
 HEADERS += \
     mainwindow.h \
-    database.h
+    database.h \
+    logindialog.h \
+    editdialog.h
 
 RESOURCES += \
     resources.qrc
