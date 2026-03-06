@@ -413,7 +413,7 @@ void MainWindow::onGenerateReportClicked()
 
     QString html = "<html dir='rtl'><head><style>"
                    "body { font-family: Arial, sans-serif; }"
-                   "h1 { text-align: center; color: #2c3e50; }"
+                   "h1 { text-align: right; color: #2c3e50; }"
                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
                    "th, td { border: 1px solid #bdc3c7; padding: 8px; text-align: right; }"
                    "th { background-color: #34495e; color: white; }"
@@ -440,7 +440,7 @@ void MainWindow::onGenerateReportClicked()
     QTextDocument document;
     document.setHtml(html);
 
-    QPrinter printer(QPrinter::HighResolution);
+    QPrinter printer(QPrinter::ScreenResolution);
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setOutputFileName(fileName);
     printer.setPageOrientation(QPageLayout::Landscape);
