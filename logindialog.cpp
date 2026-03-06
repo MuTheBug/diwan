@@ -87,7 +87,7 @@ void LoginDialog::setupUi()
 void LoginDialog::onLoginButtonClicked()
 {
     QString username = usernameLineEdit->text().trimmed();
-    QString password = passwordLineEdit->text();
+    QString password = passwordLineEdit->text().trimmed();
 
     if (username.isEmpty() || password.isEmpty()) {
         QMessageBox::warning(this, "تنبيه", "يرجى إدخال اسم المستخدم وكلمة المرور.");
