@@ -19,21 +19,6 @@ struct DocumentRecord {
     bool needsFollowUp; // 1 for true, 0 for false
 };
 
-struct User {
-    int id;
-    QString username;
-    QString passwordHash;
-    QString role; // "admin", "user"
-};
-
-struct AuditRecord {
-    int id;
-    QString username;
-    QString action;
-    QString timestamp;
-    QString details;
-};
-
 class Database
 {
 public:
@@ -47,21 +32,7 @@ public:
     bool updateRecord(const DocumentRecord& record);
     bool deleteRecord(int id);
 
-    // User Management
-    bool authenticate(const QString& username, const QString& password);
-    bool addUser(const QString& username, const QString& password, const QString& role);
-    bool deleteUser(const QString& username);
-    bool changePassword(const QString& username, const QString& newPassword);
-    QList<User> getAllUsers();
-    bool hasUsers();
-
-    // Audit Log
-    void logAction(const QString& action, const QString& details);
-    QList<AuditRecord> getAuditLogs();
-
-    // Session
-    QString getCurrentUser() const;
-    QString getCurrentRole() const;
+    // Session (Mocked for legacy compatibility)
     bool isAdmin() const;
 
     // DB Admin
@@ -69,9 +40,6 @@ public:
     void closeDatabase();
 
 private:
-    QString currentUser;
-    QString currentRole;
-
     Database();
     ~Database();
     Database(const Database&) = delete;

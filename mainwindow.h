@@ -44,7 +44,6 @@ private:
     void setupUi();
     void setupDashboardTab(QWidget *tab);
     void setupArchiveTab(QWidget *tab);
-    void setupAdminTab(QWidget *tab);
     void setupSettingsTab(QWidget *tab);
     void setupMenu();
     void clearForm();
@@ -90,14 +89,9 @@ private:
 
     QPushButton *addButton;
 
-    // Admin Tab
-    QTableWidget *usersTable;
-    QTableWidget *auditTable;
-
     // Settings Tab
     QLineEdit *archivePathLineEdit;
     QPushButton *changePathButton;
-    QPushButton *changePasswordButton;
 
     QString currentSelectedFilePath;
     QString archiveDir;

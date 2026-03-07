@@ -12,13 +12,11 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     database.cpp \
-    logindialog.cpp \
     editdialog.cpp
 
 HEADERS += \
     mainwindow.h \
     database.h \
-    logindialog.h \
     editdialog.h
 
 RESOURCES += \

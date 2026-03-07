@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "logindialog.h"
 
 #include <QApplication>
 
@@ -21,13 +20,7 @@ int main(int argc, char *argv[])
         "QHeaderView::section { background-color: #34495e; color: white; padding: 5px; font-weight: bold; }"
     );
 
-    // Show login dialog first
-    LoginDialog login;
-    if (login.exec() == QDialog::Accepted) {
-        MainWindow w;
-        w.show();
-        return a.exec();
-    }
-
-    return 0; // Exit if login was cancelled or failed
+    MainWindow w;
+    w.show();
+    return a.exec();
 }

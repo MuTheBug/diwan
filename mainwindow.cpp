@@ -102,18 +102,7 @@ void MainWindow::setupUi()
 
     tabWidget->addTab(dashboardTab, "الرئيسية (الإحصائيات)");
     tabWidget->addTab(archiveTab, "الأرشيف و المعاملات");
-
-    if (Database::instance().isAdmin()) {
-        QWidget *adminTab = new QWidget();
-        setupAdminTab(adminTab);
-        tabWidget->addTab(adminTab, "إدارة النظام");
-
-        // Settings are admin only now
-        tabWidget->addTab(settingsTab, "إعدادات النظام");
-    } else {
-        // Hide delete/edit if not admin (optional, depending on role rules, we just disable delete here)
-        deleteButton->hide();
-    }
+    tabWidget->addTab(settingsTab, "إعدادات النظام");
 
     mainLayout->addWidget(tabWidget);
 }
@@ -360,117 +349,8 @@ void MainWindow::setupSettingsTab(QWidget *tab)
         }
     });
 
-    changePasswordButton = new QPushButton("تغيير كلمة المرور الخاصة بحسابي", this);
-    formLayout->addRow("", changePasswordButton);
-
-    connect(changePasswordButton, &QPushButton::clicked, [this]() {
-        bool ok;
-        QString newPass = QInputDialog::getText(this, "كلمة مرور جديدة", "أدخل كلمة المرور الجديدة:", QLineEdit::Password, "", &ok);
-        if (ok && !newPass.isEmpty()) {
-            if (Database::instance().changePassword(Database::instance().getCurrentUser(), newPass)) {
-                QMessageBox::information(this, "نجاح", "تم تغيير كلمة المرور بنجاح.");
-                Database::instance().logAction("تغيير كلمة المرور", "قام بتغيير كلمة المرور الخاصة به");
-            } else {
-                QMessageBox::critical(this, "خطأ", "فشل في تغيير كلمة المرور.");
-            }
-        }
-    });
-
     layout->addLayout(formLayout);
     layout->addStretch();
-}
-
-void MainWindow::setupAdminTab(QWidget *tab)
-{
-    QVBoxLayout *layout = new QVBoxLayout(tab);
-
-    QGroupBox *usersGroup = new QGroupBox("إدارة المستخدمين", this);
-    QVBoxLayout *ul = new QVBoxLayout(usersGroup);
-    usersTable = new QTableWidget(this);
-    usersTable->setColumnCount(3);
-    usersTable->setHorizontalHeaderLabels({"المعرف", "اسم المستخدم", "الصلاحية"});
-    usersTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    usersTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    usersTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    ul->addWidget(usersTable);
-
-    QHBoxLayout *uBtns = new QHBoxLayout();
-    QPushButton *addUserBtn = new QPushButton("إضافة مستخدم", this);
-    QPushButton *delUserBtn = new QPushButton("حذف المستخدم", this);
-    uBtns->addWidget(addUserBtn);
-    uBtns->addWidget(delUserBtn);
-    ul->addLayout(uBtns);
-
-    auto refreshUsers = [this]() {
-        usersTable->setRowCount(0);
-        QList<User> users = Database::instance().getAllUsers();
-        for (int i=0; i<users.size(); ++i) {
-            usersTable->insertRow(i);
-            usersTable->setItem(i, 0, new QTableWidgetItem(QString::number(users[i].id)));
-            usersTable->setItem(i, 1, new QTableWidgetItem(users[i].username));
-            usersTable->setItem(i, 2, new QTableWidgetItem(users[i].role));
-        }
-    };
-
-    connect(addUserBtn, &QPushButton::clicked, [this, refreshUsers]() {
-        QDialog d(this);
-        d.setWindowTitle("إضافة مستخدم جديد");
-        QFormLayout fl(&d);
-        QLineEdit uName; fl.addRow("اسم المستخدم:", &uName);
-        QLineEdit uPass; uPass.setEchoMode(QLineEdit::Password); fl.addRow("كلمة المرور:", &uPass);
-        QComboBox uRole; uRole.addItems({"user", "admin"}); fl.addRow("الصلاحية:", &uRole);
-        QPushButton save("حفظ"); fl.addRow("", &save);
-        connect(&save, &QPushButton::clicked, [&]() {
-            if(!uName.text().isEmpty() && !uPass.text().isEmpty()) {
-                Database::instance().addUser(uName.text(), uPass.text(), uRole.currentText());
-                refreshUsers();
-                d.accept();
-            }
-        });
-        d.exec();
-    });
-
-    connect(delUserBtn, &QPushButton::clicked, [this, refreshUsers]() {
-        int r = usersTable->currentRow();
-        if(r >= 0) {
-            QString un = usersTable->item(r, 1)->text();
-            if (Database::instance().deleteUser(un)) {
-                refreshUsers();
-            } else {
-                QMessageBox::warning(this, "خطأ", "لا يمكن حذف هذا المستخدم (ربما هو حسابك الحالي أو المدير الأساسي).");
-            }
-        }
-    });
-
-    refreshUsers();
-    layout->addWidget(usersGroup);
-
-    QGroupBox *auditGroup = new QGroupBox("سجل العمليات (Audit Log)", this);
-    QVBoxLayout *al = new QVBoxLayout(auditGroup);
-    auditTable = new QTableWidget(this);
-    auditTable->setColumnCount(4);
-    auditTable->setHorizontalHeaderLabels({"المستخدم", "العملية", "التفاصيل", "الوقت"});
-    auditTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    al->addWidget(auditTable);
-
-    auto refreshAudit = [this]() {
-        auditTable->setRowCount(0);
-        QList<AuditRecord> logs = Database::instance().getAuditLogs();
-        for (int i=0; i<logs.size(); ++i) {
-            auditTable->insertRow(i);
-            auditTable->setItem(i, 0, new QTableWidgetItem(logs[i].username));
-            auditTable->setItem(i, 1, new QTableWidgetItem(logs[i].action));
-            auditTable->setItem(i, 2, new QTableWidgetItem(logs[i].details));
-            auditTable->setItem(i, 3, new QTableWidgetItem(logs[i].timestamp));
-        }
-    };
-
-    QPushButton *refAuditBtn = new QPushButton("تحديث السجل", this);
-    connect(refAuditBtn, &QPushButton::clicked, refreshAudit);
-    al->addWidget(refAuditBtn);
-
-    refreshAudit();
-    layout->addWidget(auditGroup);
 }
 
 void MainWindow::setupMenu()

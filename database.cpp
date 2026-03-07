@@ -5,7 +5,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 
-Database::Database() : currentUser(""), currentRole("")
+Database::Database()
 {
 }
 
@@ -60,23 +60,6 @@ bool Database::initialize()
                           "file_path TEXT NOT NULL, "
                           "FOREIGN KEY(document_id) REFERENCES documents(id))");
     if (!success) qDebug() << "Error creating attachments table:" << query.lastError().text();
-
-    // 3. Users Table
-    success &= query.exec("CREATE TABLE IF NOT EXISTS users ("
-                          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                          "username TEXT UNIQUE NOT NULL, "
-                          "password_hash TEXT NOT NULL, "
-                          "role TEXT NOT NULL)");
-    if (!success) qDebug() << "Error creating users table:" << query.lastError().text();
-
-    // 4. Audit Log Table
-    success &= query.exec("CREATE TABLE IF NOT EXISTS audit_log ("
-                          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                          "username TEXT NOT NULL, "
-                          "action TEXT NOT NULL, "
-                          "timestamp TEXT NOT NULL, "
-                          "details TEXT NOT NULL)");
-    if (!success) qDebug() << "Error creating audit_log table:" << query.lastError().text();
 
     if (success) {
         // Migrations
@@ -156,7 +139,6 @@ bool Database::addRecord(const DocumentRecord& record)
         insertAttach.exec();
     }
 
-    logAction("إضافة", "تمت إضافة معاملة " + record.type + " رقم " + record.docNumber);
     return true;
 }
 
@@ -231,7 +213,6 @@ bool Database::updateRecord(const DocumentRecord& record)
         insertAttach.exec();
     }
 
-    logAction("تعديل", "تم تعديل المعاملة رقم " + record.docNumber);
     return true;
 }
 
@@ -278,141 +259,12 @@ bool Database::deleteRecord(int id)
         return false;
     }
 
-    logAction("حذف", "تم حذف المعاملة رقم " + docNumber);
     return true;
 }
 
-// User Management
 
-bool Database::authenticate(const QString& username, const QString& password)
-{
-    if (!db.isOpen()) return false;
-
-    QByteArray hash = QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256);
-
-    QSqlQuery query;
-    query.prepare("SELECT role FROM users WHERE username = :username AND password_hash = :hash");
-    query.bindValue(":username", username);
-    query.bindValue(":hash", hash.toHex());
-
-    if (query.exec() && query.next()) {
-        currentUser = username;
-        currentRole = query.value(0).toString();
-        logAction("دخول", "تسجيل دخول للنظام");
-        return true;
-    }
-    return false;
-}
-
-bool Database::addUser(const QString& username, const QString& password, const QString& role)
-{
-    if (!db.isOpen()) return false;
-
-    QByteArray hash = QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256);
-
-    QSqlQuery query;
-    query.prepare("INSERT INTO users (username, password_hash, role) VALUES (:username, :hash, :role)");
-    query.bindValue(":username", username);
-    query.bindValue(":hash", hash.toHex());
-    query.bindValue(":role", role);
-
-    bool ok = query.exec();
-    if (ok && !currentUser.isEmpty()) logAction("إضافة مستخدم", "تم إضافة المستخدم " + username);
-    return ok;
-}
-
-bool Database::deleteUser(const QString& username)
-{
-    if (!db.isOpen() || username == currentUser || username == "admin") return false; // Prevent suicide or removing root
-
-    QSqlQuery query;
-    query.prepare("DELETE FROM users WHERE username = :username");
-    query.bindValue(":username", username);
-
-    bool ok = query.exec();
-    if (ok) logAction("حذف مستخدم", "تم حذف المستخدم " + username);
-    return ok;
-}
-
-bool Database::changePassword(const QString& username, const QString& newPassword)
-{
-    if (!db.isOpen()) return false;
-
-    QByteArray hash = QCryptographicHash::hash(newPassword.toUtf8(), QCryptographicHash::Sha256);
-    QSqlQuery query;
-    query.prepare("UPDATE users SET password_hash = :hash WHERE username = :username");
-    query.bindValue(":hash", hash.toHex());
-    query.bindValue(":username", username);
-
-    return query.exec();
-}
-
-QList<User> Database::getAllUsers()
-{
-    QList<User> users;
-    if (!db.isOpen()) return users;
-
-    QSqlQuery query("SELECT id, username, password_hash, role FROM users");
-    while (query.next()) {
-        User u;
-        u.id = query.value(0).toInt();
-        u.username = query.value(1).toString();
-        u.passwordHash = query.value(2).toString();
-        u.role = query.value(3).toString();
-        users.append(u);
-    }
-    return users;
-}
-
-bool Database::hasUsers()
-{
-    if (!db.isOpen()) return false;
-    QSqlQuery query("SELECT COUNT(*) FROM users");
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt() > 0;
-    }
-    return false;
-}
-
-// Audit Log
-
-void Database::logAction(const QString& action, const QString& details)
-{
-    if (!db.isOpen() || currentUser.isEmpty()) return;
-
-    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-    QSqlQuery query;
-    query.prepare("INSERT INTO audit_log (username, action, timestamp, details) VALUES (:u, :a, :t, :d)");
-    query.bindValue(":u", currentUser);
-    query.bindValue(":a", action);
-    query.bindValue(":t", timestamp);
-    query.bindValue(":d", details);
-    query.exec();
-}
-
-QList<AuditRecord> Database::getAuditLogs()
-{
-    QList<AuditRecord> logs;
-    if (!db.isOpen()) return logs;
-
-    QSqlQuery query("SELECT id, username, action, timestamp, details FROM audit_log ORDER BY id DESC LIMIT 1000"); // Limit to last 1000
-    while (query.next()) {
-        AuditRecord rec;
-        rec.id = query.value(0).toInt();
-        rec.username = query.value(1).toString();
-        rec.action = query.value(2).toString();
-        rec.timestamp = query.value(3).toString();
-        rec.details = query.value(4).toString();
-        logs.append(rec);
-    }
-    return logs;
-}
-
-// Session
-
-QString Database::getCurrentUser() const { return currentUser; }
-QString Database::getCurrentRole() const { return currentRole; }
-bool Database::isAdmin() const { return currentRole == "admin"; }
+// Session (Mocked for legacy UI support)
+bool Database::isAdmin() const { return true; }
 
 QString Database::getDatabasePath() const
 {
