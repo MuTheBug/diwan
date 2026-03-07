@@ -12,8 +12,8 @@ int main(int argc, char *argv[])
     // Apply a simple modern stylesheet
     a.setStyleSheet(
         "QMainWindow { background-color: #ecf0f1; }"
-        "QGroupBox { font-weight: bold; font-size: 16px; border: 1px solid #bdc3c7; border-radius: 5px; margin-top: 10px; }"
-        "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }"
+        "QGroupBox { font-weight: bold; font-size: 12px; border: 1px solid #bdc3c7; border-radius: 5px; margin-top: 15px; }"
+        "QGroupBox::title { subcontrol-origin: margin; left: 10px; top: -5px; padding: 0 3px 0 3px; }"
         "QLineEdit, QDateEdit, QComboBox { padding: 5px; border: 1px solid #bdc3c7; border-radius: 3px; }"
         "QPushButton { padding: 5px; border-radius: 3px; }"
         "QTableWidget { background-color: white; alternate-background-color: #f9f9f9; }"

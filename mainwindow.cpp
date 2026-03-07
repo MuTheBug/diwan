@@ -89,7 +89,7 @@ void MainWindow::setupUi()
     mainLayout->addWidget(headerWidget);
 
     tabWidget = new QTabWidget(this);
-    tabWidget->setStyleSheet("QTabBar::tab { padding: 10px 20px; font-weight: bold; font-size: 14px; }");
+    tabWidget->setStyleSheet("QTabBar::tab { padding: 8px 15px; font-weight: bold; font-size: 12px; }");
 
     QWidget *dashboardTab = new QWidget();
     setupDashboardTab(dashboardTab);
